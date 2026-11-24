@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>对拍键契约 · 对拍</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+  <div class="壳">
+    <header class="顶栏">
+      <div class="顶左">
+        <div class="牌名">对拍</div>
+        <div class="牌骨">左轨装载 → 右轨装载 → 同键对齐落差 → 单边悬账 → 对拍结论</div>
+      </div>
+      <nav class="管线">
+          <a href="/">对拍台</a>
+          <a href="/左轨.html">左轨流水</a>
+          <a href="/右轨.html">右轨流水</a>
+          <a href="/对齐差.html">对齐差表</a>
+          <a href="/悬账单.html">悬账单</a>
+          <a href="/对拍结论.html">对拍结论</a>
+          <a href="/源登记.html">源登记</a>
+          <a href="/轨规.html">轨规</a>
+          <a href="/对拍键契约.html" class="亮">键契约</a>
+      </nav>
+    </header>
+    <main class="主">
+
+      <section class="行卡">
+        <h1>对拍键契约 · 字段契约变更下的入库与对齐管道</h1>
+        <p class="说明">择定策略「切流账册拒旧契约」：批次申报契约版≠现行版 → 整批拒收、钉现行指纹入账册，现行流水不增行（现行增行=0 可区分）。切契约加锁+基期版校验不双成功，请求编号幂等不双写。</p>
+        <div id="水位"></div>
+      </section>
+
+      <section class="行卡 双栏">
+        <div>
+          <h2>策略目录</h2>
+          <div id="策略列表"></div>
+        </div>
+        <div>
+          <h2>策略详情</h2>
+          <div id="策略详情" class="说明">点左侧策略卡片看详情。</div>
+        </div>
+      </section>
+
+      <section class="行卡 双栏">
+        <div>
+          <h2>切契约</h2>
+          <div class="工具条">
+            <label>契约版 <input id="切版" value="v2" style="width:70px"/></label>
+            <label>读列 <input id="切列" value="渠道单号" style="width:110px"/></label>
+            <label>清洗 <input id="切洗" value="strip|大写|去前缀:CH-" style="width:190px"/></label>
+          </div>
+          <div class="工具条">
+            <label>基期版 <input id="切基期" style="width:70px"/></label>
+            <label>请求编号 <input id="切请求" style="width:150px"/></label>
+            <button id="切">切流</button>
+          </div>
+          <pre class="报" id="切报"></pre>
+        </div>
+        <div>
+          <h2>契约只读接口</h2>
+          <div id="契约表"></div>
+        </div>
+      </section>
+
+      <section class="行卡 双栏">
+        <div>
+          <h2>左轨装载（契约）</h2>
+          <div class="工具条">
+            <button class="次" id="左旧样">填旧键样例</button>
+            <button class="次" id="左新样">填新键样例</button>
+            <button id="左灌">灌左轨</button>
+          </div>
+          <textarea id="左体" rows="7" style="width:100%"></textarea>
+          <pre class="报" id="左报"></pre>
+        </div>
+        <div>
+          <h2>右轨装载（契约）</h2>
+          <div class="工具条">
+            <button class="次" id="右旧样">填旧键样例</button>
+            <button class="次" id="右新样">填新键样例</button>
+            <button id="右灌">灌右轨</button>
+          </div>
+          <textarea id="右体" rows="7" style="width:100%"></textarea>
+          <pre class="报" id="右报"></pre>
+        </div>
+      </section>
+
+      <section class="行卡">
+        <h2>契约对齐</h2>
+        <div class="工具条">
+          <button id="跑">跑对齐</button>
+          <span class="说明">只读现行契约版行；旧契约行排除并计数。</span>
+        </div>
+        <pre class="报" id="对齐报"></pre>
+        <div id="差表"></div>
+        <div id="悬表"></div>
+      </section>
+
+      <section class="行卡">
+        <h2>切流账册</h2>
+        <div id="账册表"></div>
+      </section>
+
+      <section class="行卡 双栏">
+        <div><h2>契约左轨</h2><div id="左表"></div></div>
+        <div><h2>契约右轨</h2><div id="右表"></div></div>
+      </section>
+
+    </main>
+  </div>
+  <script src="/common.js"></script>
+  <script>
+const 新契约版 = () => document.getElementById("切版").value.trim() || "v2";
+function 样例(轨, 版) {
+  const 源 = 轨 === "左" ? "渠甲" : "核乙";
+  const 新 = 版 !== "v1";
+  const ev = n => 新
+    ? {"事件编号": `${轨}N${n}`, "渠道单号": `ch-ord-9${n} `, "金额分": 1000 + n, "源键": 源, "事件时": "2026-11-24T10:00:0" + n + "Z"}
+    : {"事件编号": `${轨}O${n}`, "业务键": `ORD-9${n}`, "金额分": 1000 + n, "源键": 源, "事件时": "2026-11-24T10:00:0" + n + "Z"};
+  return {"批次编号": `契${轨}-${版}-样例`, "契约版": 版, "事件": [ev(1), ev(2)]};
+}
+async function 刷() {
+  const s = await get("/api/对拍键契约/状态");
+  document.getElementById("水位").innerHTML = 统计([
+    ["现行契约版", s.现行版], ["指纹", s.指纹], ["读列", s.读列], ["清洗", s.清洗],
+    ["钉板一致", s.钉板一致 ? "一致" : "拧花"], ["左行数", s.左行数], ["右行数", s.右行数],
+    ["旧契约左/右", s.左旧契约行数 + "/" + s.右旧契约行数], ["切流", s.切流数], ["拒收", s.拒收数]
+  ]);
+  document.getElementById("切基期").value = s.现行版;
+  const 契 = await get("/api/对拍键契约/契约");
+  document.getElementById("契约表").innerHTML = 表(
+    ["契约版","读列","清洗","指纹","valid","生效时"], 契,
+    r => `<td>${r.契约版}</td><td>${r.读列}</td><td>${r.清洗}</td><td>${r.指纹}</td><td>${徽(r.valid)}</td><td>${r.生效时}</td>`);
+  const 账 = await get("/api/对拍键契约/账册");
+  document.getElementById("账册表").innerHTML = 表(
+    ["编号","类别","契约版","自版","指纹","拒因","时刻"], 账,
+    r => `<td>${r.编号}</td><td>${徽(r.类别)}</td><td>${r.契约版}</td><td>${r.自版||"-"}</td><td>${r.指纹}</td><td>${r.拒因||"-"}</td><td>${r.时刻}</td>`);
+  const 左 = await get("/api/对拍键契约/左轨");
+  document.getElementById("左表").innerHTML = 表(
+    ["事件编号","对齐键","金额分","契约版","批次"], 左,
+    r => `<td>${r.事件编号}</td><td>${r.对齐键}</td><td>${r.金额分}</td><td>${r.契约版}</td><td>${r.批次编号}</td>`);
+  const 右 = await get("/api/对拍键契约/右轨");
+  document.getElementById("右表").innerHTML = 表(
+    ["事件编号","对齐键","金额分","契约版","批次"], 右,
+    r => `<td>${r.事件编号}</td><td>${r.对齐键}</td><td>${r.金额分}</td><td>${r.契约版}</td><td>${r.批次编号}</td>`);
+  const 差 = await get("/api/对拍键契约/对齐差");
+  document.getElementById("差表").innerHTML = 表(
+    ["对齐键","左金额分","右金额分","差型","契约版","时刻"], 差,
+    r => `<td>${r.对齐键}</td><td>${r.左金额分 ?? "-"}</td><td>${r.右金额分 ?? "-"}</td><td>${徽(r.差型)}</td><td>${r.契约版}</td><td>${r.时刻}</td>`);
+  const 悬 = await get("/api/对拍键契约/悬账");
+  document.getElementById("悬表").innerHTML = 表(
+    ["对齐键","悬边","金额分","原因","契约版"], 悬,
+    r => `<td>${r.对齐键}</td><td>${r.悬边}</td><td>${r.金额分}</td><td>${r.原因}</td><td>${r.契约版}</td>`);
+}
+(async () => {
+  const 策略 = (await get("/api/对拍键契约/策略")).策略;
+  document.getElementById("策略列表").innerHTML = 策略.map((p, i) =>
+    `<div class="条主" data-i="${i}" style="cursor:pointer">
+       <b>${p.键}</b> ${p.现行 ? '<span class="徽 绿">现行</span>' : '<span class="徽 灰">备选</span>'}
+       <div class="说明">${p.形态} · ${p.要点}</div>
+     </div>`).join("");
+  const 看详情 = i => {
+    const p = 策略[i];
+    document.getElementById("策略详情").innerHTML =
+      `<h3 class="mt0">${p.键}</h3>` +
+      Object.entries(p.详情).map(([k, v]) => `<div class="条信息"><b>${k}</b>：${v}</div>`).join("");
+  };
+  document.querySelectorAll("#策略列表 .条主").forEach(el =>
+    el.onclick = () => 看详情(el.dataset.i));
+  看详情(0);
+
+  document.getElementById("切请求").value = "切-" + Math.random().toString(16).slice(2, 10);
+  document.getElementById("切").onclick = async () => {
+    const body = {
+      "契约版": document.getElementById("切版").value,
+      "读列": document.getElementById("切列").value,
+      "清洗": document.getElementById("切洗").value,
+      "基期版": document.getElementById("切基期").value,
+      "请求编号": document.getElementById("切请求").value,
+    };
+    try {
+      document.getElementById("切报").textContent = JSON.stringify(await post("/api/对拍键契约/切契约", body), null, 2);
+    } catch (e) { document.getElementById("切报").textContent = String(e); }
+    await 刷();
+  };
+  document.getElementById("左旧样").onclick = () => document.getElementById("左体").value = JSON.stringify(样例("左", "v1"), null, 2);
+  document.getElementById("左新样").onclick = () => document.getElementById("左体").value = JSON.stringify(样例("左", 新契约版()), null, 2);
+  document.getElementById("右旧样").onclick = () => document.getElementById("右体").value = JSON.stringify(样例("右", "v1"), null, 2);
+  document.getElementById("右新样").onclick = () => document.getElementById("右体").value = JSON.stringify(样例("右", 新契约版()), null, 2);
+  document.getElementById("左灌").onclick = async () => {
+    document.getElementById("左报").textContent = JSON.stringify(await post("/api/对拍键契约/左装载", JSON.parse(document.getElementById("左体").value)), null, 2);
+    await 刷();
+  };
+  document.getElementById("右灌").onclick = async () => {
+    document.getElementById("右报").textContent = JSON.stringify(await post("/api/对拍键契约/右装载", JSON.parse(document.getElementById("右体").value)), null, 2);
+    await 刷();
+  };
+  document.getElementById("跑").onclick = async () => {
+    document.getElementById("对齐报").textContent = JSON.stringify(await post("/api/对拍键契约/对齐"), null, 2);
+    await 刷();
+  };
+  document.getElementById("左旧样").click();
+  document.getElementById("右新样").click();
+  await 刷();
+})();
+  </script>
+</body>
+</html>
